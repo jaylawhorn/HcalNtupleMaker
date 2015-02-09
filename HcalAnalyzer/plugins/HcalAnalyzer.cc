@@ -99,6 +99,7 @@ private:
   int PulseCount;
   double Charge[5184][10];
   double Pedestal[5184][10];
+  double Gain[5184][10];
   int IEta[5184];
   int IPhi[5184];
   int Depth[5184];
@@ -204,6 +205,7 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 	 {
 	   const HcalQIESample &QIE = iter->sample(i);
 
+	   Gain[PulseCount][i] = Calibrations.respcorrgain(QIE.capid());
 	   Pedestal[PulseCount][i] = Calibrations.pedestal(QIE.capid());
 	   Charge[PulseCount][i] = Tool[i] - Pedestal[PulseCount][i];
 	 }
@@ -243,6 +245,7 @@ HcalAnalyzer::beginJob()
       OutputTree->Branch("PulseCount", &PulseCount, "PulseCount/I");
       OutputTree->Branch("Charge", &Charge, "Charge[5184][10]/D");
       OutputTree->Branch("Pedestal", &Pedestal, "Pedestal[5184][10]/D");
+      OutputTree->Branch("Gain", &Gain, "Gain[5184][10]/D");
       OutputTree->Branch("IEta", &IEta, "IEta[5184]/I");
       OutputTree->Branch("IPhi", &IPhi, "IPhi[5184]/I");
       OutputTree->Branch("Depth", &Depth, "Depth[5184]/I");
@@ -287,6 +290,7 @@ void HcalAnalyzer::ClearVariables()
     {
       for(int j = 0; j < 10; j++)
 	{
+	  Gain[i][j] = 0;
 	  Charge[i][j] = 0;
 	  Pedestal[i][j] = 0;
 	}
