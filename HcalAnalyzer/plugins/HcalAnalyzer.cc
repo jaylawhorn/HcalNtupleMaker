@@ -38,6 +38,7 @@ using namespace std;
 #include "FWCore/Framework/interface/MakerMacros.h"
 #include "FWCore/ServiceRegistry/interface/Service.h"
 #include "CommonTools/UtilAlgos/interface/TFileService.h"
+#include "FWCore/Utilities/interface/InputTag.h"
 
 #include "FWCore/ParameterSet/interface/ParameterSet.h"
 
@@ -62,6 +63,10 @@ using namespace std;
 #include "Geometry/CaloGeometry/interface/CaloGeometry.h"
 #include "Geometry/Records/interface/CaloGeometryRecord.h"
 
+#include "SimDataFormats/CaloHit/interface/PCaloHit.h"
+#include "SimDataFormats/CaloHit/interface/PCaloHitContainer.h"
+#include "SimCalorimetry/HcalSimAlgos/interface/HcalSimParameterMap.h"
+
 //--------------------------------------------------------------------------- 
 class HcalNtuplelizer;
 //--------------------------------------------------------------------------- 
@@ -82,6 +87,9 @@ private:
   
   
 private:
+  std::map<int, double> hitEnergySumMap_;
+  HcalSimParameterMap simParameterMap_;
+
   bool FillHBHE;                  // Whether to store HBHE digi-level information or not                                                                      
   double TotalChargeThreshold;    // To avoid trees from overweight, only store digis above some threshold                                                    
   string sHBHERecHitCollection;   // Name of the HBHE rechit collection        
@@ -100,6 +108,7 @@ private:
   double Charge[5184][10];
   double Pedestal[5184][10];
   double Gain[5184][10];
+  double SimHitEnergy[5184];
   int IEta[5184];
   int IPhi[5184];
   int Depth[5184];
@@ -109,21 +118,20 @@ private:
   
   const CaloGeometry *Geometry;
   
-  void ClearVariables();
-  
+  void ClearVariables();  
 };
 
 
 //
 // constructors and destructor
 //
-HcalAnalyzer::HcalAnalyzer(const edm::ParameterSet& iConfig)
-  
+HcalAnalyzer::HcalAnalyzer(const edm::ParameterSet& iConfig)  
 {
   FillHBHE = iConfig.getUntrackedParameter<bool>("FillHBHE", true);
   TotalChargeThreshold = iConfig.getUntrackedParameter<double>("TotalChargeThreshold", 0);
   
   sHBHERecHitCollection = iConfig.getUntrackedParameter<string>("HBHERecHits","hbhereco");
+
 }
 
 
@@ -146,6 +154,9 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    Handle<HBHEDigiCollection> hHBHEDigis;
    iEvent.getByLabel(InputTag("hcalDigis"), hHBHEDigis);
 
+   Handle<PCaloHitContainer> hSimHits;
+   iEvent.getByLabel("g4SimHits","HcalHits",hSimHits);
+
    ESHandle<HcalDbService> hConditions;
    iSetup.get<HcalDbRecord>().get(hConditions);
 
@@ -161,6 +172,41 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    Orbit = iEvent.orbitNumber();
    Time = iEvent.time().value();
 
+
+   // store the energy of each hit in a map
+   hitEnergySumMap_.clear();
+   PCaloHitContainer::const_iterator hitItr = hSimHits->begin();
+   PCaloHitContainer::const_iterator last = hSimHits->end();
+
+   for( ; hitItr != last; ++hitItr)
+     {
+       HcalDetId hcalDetId(hitItr->id());
+       
+       if(hcalDetId.subdet()== HcalBarrel || hcalDetId.subdet() == HcalEndcap)
+	 {
+	   int id = hitItr->id();
+	   double samplingFactor=1.;
+	   if(hcalDetId.subdet()== HcalBarrel)
+	     {
+	       samplingFactor = simParameterMap_.hbParameters().samplingFactor(DetId(id));
+	     }
+	   else if(hcalDetId.subdet() == HcalEndcap)
+	     {
+	       samplingFactor = simParameterMap_.heParameters().samplingFactor(DetId(id));
+	     }
+	   double energy = hitItr->energy() * samplingFactor;
+	   // add it to the map
+	   std::map<int, double>::iterator mapItr = hitEnergySumMap_.find(id);
+	   if(mapItr == hitEnergySumMap_.end()) {
+	     hitEnergySumMap_[id] = energy;
+	   }
+	   else
+	     {
+	       hitEnergySumMap_[id] += energy;
+	     }
+	 }
+     }
+   
    // HBHE rechit maps - we want to link rechits and digis together                                                                                                                                         
    map<HcalDetId, int> RecHitIndex;
    for(int i = 0; i < (int)hRecHits->size(); i++)
@@ -174,9 +220,7 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
      {
        HcalDetId id = iter->id();
 
-
-
-       // First let's convert ADC to deposited charge                                                                                                                                                        
+       // First let's convert ADC to deposited charge                                                                                                                                                       
        const HcalCalibrations &Calibrations = hConditions->getHcalCalibrations(id);
        const HcalQIECoder *ChannelCoder = hConditions->getHcalCoder(id);
        const HcalQIEShape *Shape = hConditions->getHcalShape(ChannelCoder);
@@ -210,6 +254,7 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 	   Charge[PulseCount][i] = Tool[i] - Pedestal[PulseCount][i];
 	 }
 
+       SimHitEnergy[PulseCount]=hitEnergySumMap_[(*hRecHits)[RecHitIndex[id]].id().rawId()];
        IEta[PulseCount] = id.ieta();
        IPhi[PulseCount] = id.iphi();
        Depth[PulseCount] = id.depth();
@@ -246,6 +291,7 @@ HcalAnalyzer::beginJob()
       OutputTree->Branch("Charge", &Charge, "Charge[5184][10]/D");
       OutputTree->Branch("Pedestal", &Pedestal, "Pedestal[5184][10]/D");
       OutputTree->Branch("Gain", &Gain, "Gain[5184][10]/D");
+      OutputTree->Branch("SimHitEnergy", &SimHitEnergy, "SimHitEnergy[5184]/D");
       OutputTree->Branch("IEta", &IEta, "IEta[5184]/I");
       OutputTree->Branch("IPhi", &IPhi, "IPhi[5184]/I");
       OutputTree->Branch("Depth", &Depth, "Depth[5184]/I");
@@ -295,7 +341,7 @@ void HcalAnalyzer::ClearVariables()
 	  Pedestal[i][j] = 0;
 	}
 
-
+      SimHitEnergy[i] = 0;
       IEta[i] = 0;
       IPhi[i] = 0;
       Depth[i] = 0;

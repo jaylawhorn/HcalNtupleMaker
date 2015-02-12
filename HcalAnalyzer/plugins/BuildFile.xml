@@ -19,4 +19,7 @@
 <use   name="DataFormats/JetReco" />
 <use   name="RecoMET/METAlgorithms" />
 <use   name="CommonTools/UtilAlgos" />
+<use   name="SimDataFormats/CaloHit" />
+<use   name="SimDataFormats/CrossingFrame" />
+<use   name="SimCalorimetry/HcalSimAlgos" />
 <flags   EDM_PLUGIN="1" />
