@@ -22,4 +22,5 @@
 <use   name="SimDataFormats/CaloHit" />
 <use   name="SimDataFormats/CrossingFrame" />
 <use   name="SimCalorimetry/HcalSimAlgos" />
+<use   name="RecoLocalCalo/HcalRecAlgos" />
 <flags   EDM_PLUGIN="1" />

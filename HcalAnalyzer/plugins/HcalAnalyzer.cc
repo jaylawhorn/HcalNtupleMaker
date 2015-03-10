@@ -67,6 +67,10 @@ using namespace std;
 #include "SimDataFormats/CaloHit/interface/PCaloHitContainer.h"
 #include "SimCalorimetry/HcalSimAlgos/interface/HcalSimParameterMap.h"
 
+#include "DataFormats/METReco/interface/HcalNoiseSummary.h"
+#include "DataFormats/METReco/interface/HcalNoiseRBX.h"
+#include "RecoMET/METAlgorithms/interface/HcalHPDRBXMap.h"
+
 //--------------------------------------------------------------------------- 
 class HcalNtuplelizer;
 //--------------------------------------------------------------------------- 
@@ -112,6 +116,19 @@ private:
   int IEta[5184];
   int IPhi[5184];
   int Depth[5184];
+
+  // Summary variables for baseline Hcal noise filter                           
+  int HPDHits;
+  int HPDNoOtherHits;
+  int MaxZeros;
+  double MinE2E10;
+  double MaxE2E10;
+  bool HasBadRBXR45;
+  bool HasBadRBXRechitR45Loose;
+  bool HasBadRBXRechitR45Tight;
+
+  // Official decision from the baseline hcal noise filter                      
+  bool OfficialDecision;
   
 private:
   TTree *OutputTree;
@@ -163,6 +180,13 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    ESHandle<CaloGeometry> hGeometry;
    iSetup.get<CaloGeometryRecord>().get(hGeometry);
    Geometry = hGeometry.product();
+
+   Handle<HcalNoiseSummary> hSummary;
+   iEvent.getByLabel("hcalnoise", hSummary);
+
+   Handle<bool> hNoiseResult;
+   iEvent.getByLabel(InputTag("HBHENoiseFilterResultProducer", "HBHENoiseFilterResult"), hNoiseResult);
+   OfficialDecision = *hNoiseResult;
 
    // basic event coordinates                                                                                                                                                                               
    RunNumber = iEvent.id().run();
@@ -262,8 +286,19 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
        PulseCount = PulseCount + 1;
      }
 
+   // hcal sumamry objects               
 
-   // finally actually fill the tree                                                                                                                                                                        
+   HPDHits = hSummary->maxHPDHits();
+   HPDNoOtherHits = hSummary->maxHPDNoOtherHits();
+   MaxZeros = hSummary->maxZeros();
+   MinE2E10 = hSummary->minE2Over10TS();
+   MaxE2E10 = hSummary->maxE2Over10TS();
+   HasBadRBXR45 = hSummary->HasBadRBXTS4TS5();
+   HasBadRBXRechitR45Loose = hSummary->HasBadRBXRechitR45Loose();
+   HasBadRBXRechitR45Tight = hSummary->HasBadRBXRechitR45Tight();
+
+   // finally actually fill the tree
+
    OutputTree->Fill();
 
 }
@@ -283,7 +318,16 @@ HcalAnalyzer::beginJob()
   OutputTree->Branch("Orbit", &Orbit, "Orbit/LL");
   OutputTree->Branch("Time", &Time, "Time/LL");
 
+  OutputTree->Branch("HPDHits", &HPDHits, "HPDHits/I");
+  OutputTree->Branch("HPDNoOtherHits", &HPDNoOtherHits, "HPDNoOtherHits/I");
+  OutputTree->Branch("MaxZeros", &MaxZeros, "MaxZeros/I");
+  OutputTree->Branch("MinE2E10", &MinE2E10, "MinE2E10/D");
+  OutputTree->Branch("MaxE2E10", &MaxE2E10, "MaxE2E10/D");
+  OutputTree->Branch("HasBadRBXR45", &HasBadRBXR45, "HasBadRBXR45/O");
+  OutputTree->Branch("HasBadRBXRechitR45Loose", &HasBadRBXRechitR45Loose, "HasBadRBXRechitR45Loose/O");
+  OutputTree->Branch("HasBadRBXRechitR45Tight", &HasBadRBXRechitR45Tight, "HasBadRBXRechitR45Tight/O");
 
+  OutputTree->Branch("OfficialDecision", &OfficialDecision, "OfficialDecision/O");
 
   if(FillHBHE == true)
     {
@@ -347,6 +391,17 @@ void HcalAnalyzer::ClearVariables()
       Depth[i] = 0;
 
     }
+
+  HPDHits = 0;
+  HPDNoOtherHits = 0;
+  MaxZeros = 0;
+  MinE2E10 = 0;
+  MaxE2E10 = 0;
+  HasBadRBXR45 = false;
+  HasBadRBXRechitR45Loose = false;
+  HasBadRBXRechitR45Tight = false;
+
+  OfficialDecision = false;
 
 }
 
