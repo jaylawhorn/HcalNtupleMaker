@@ -95,6 +95,7 @@ private:
   HcalSimParameterMap simParameterMap_;
 
   bool FillHBHE;                  // Whether to store HBHE digi-level information or not                                                                      
+  bool IsData_;  
   double TotalChargeThreshold;    // To avoid trees from overweight, only store digis above some threshold                                                    
   string sHBHERecHitCollection;   // Name of the HBHE rechit collection        
   edm::Service<TFileService> FileService;
@@ -149,6 +150,7 @@ HcalAnalyzer::HcalAnalyzer(const edm::ParameterSet& iConfig)
   
   sHBHERecHitCollection = iConfig.getUntrackedParameter<string>("HBHERecHits","hbhereco");
 
+  IsData_ = iConfig.getUntrackedParameter<bool>("IsData");
 }
 
 
@@ -196,40 +198,41 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    Orbit = iEvent.orbitNumber();
    Time = iEvent.time().value();
 
-
-   // store the energy of each hit in a map
-   hitEnergySumMap_.clear();
-   PCaloHitContainer::const_iterator hitItr = hSimHits->begin();
-   PCaloHitContainer::const_iterator last = hSimHits->end();
-
-   for( ; hitItr != last; ++hitItr)
-     {
-       HcalDetId hcalDetId(hitItr->id());
-       
-       if(hcalDetId.subdet()== HcalBarrel || hcalDetId.subdet() == HcalEndcap)
-	 {
-	   int id = hitItr->id();
-	   double samplingFactor=1.;
-	   if(hcalDetId.subdet()== HcalBarrel)
-	     {
-	       samplingFactor = simParameterMap_.hbParameters().samplingFactor(DetId(id));
+   if(!IsData_) {
+     // store the energy of each hit in a map
+     hitEnergySumMap_.clear();
+     PCaloHitContainer::const_iterator hitItr = hSimHits->begin();
+     PCaloHitContainer::const_iterator last = hSimHits->end();
+     
+     for( ; hitItr != last; ++hitItr)
+       {
+	 HcalDetId hcalDetId(hitItr->id());
+	 
+	 if(hcalDetId.subdet()== HcalBarrel || hcalDetId.subdet() == HcalEndcap)
+	   {
+	     int id = hitItr->id();
+	     double samplingFactor=1.;
+	     if(hcalDetId.subdet()== HcalBarrel)
+	       {
+		 samplingFactor = simParameterMap_.hbParameters().samplingFactor(DetId(id));
+	       }
+	     else if(hcalDetId.subdet() == HcalEndcap)
+	       {
+		 samplingFactor = simParameterMap_.heParameters().samplingFactor(DetId(id));
+	       }
+	     double energy = hitItr->energy() * samplingFactor;
+	     // add it to the map
+	     std::map<int, double>::iterator mapItr = hitEnergySumMap_.find(id);
+	     if(mapItr == hitEnergySumMap_.end()) {
+	       hitEnergySumMap_[id] = energy;
 	     }
-	   else if(hcalDetId.subdet() == HcalEndcap)
-	     {
-	       samplingFactor = simParameterMap_.heParameters().samplingFactor(DetId(id));
-	     }
-	   double energy = hitItr->energy() * samplingFactor;
-	   // add it to the map
-	   std::map<int, double>::iterator mapItr = hitEnergySumMap_.find(id);
-	   if(mapItr == hitEnergySumMap_.end()) {
-	     hitEnergySumMap_[id] = energy;
+	     else
+	       {
+		 hitEnergySumMap_[id] += energy;
+	       }
 	   }
-	   else
-	     {
-	       hitEnergySumMap_[id] += energy;
-	     }
-	 }
-     }
+       }
+   }
    
    // HBHE rechit maps - we want to link rechits and digis together                                                                                                                                         
    map<HcalDetId, int> RecHitIndex;
@@ -278,7 +281,8 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 	   Charge[PulseCount][i] = Tool[i] - Pedestal[PulseCount][i];
 	 }
 
-       SimHitEnergy[PulseCount]=hitEnergySumMap_[(*hRecHits)[RecHitIndex[id]].id().rawId()];
+       if(!IsData_) SimHitEnergy[PulseCount]=hitEnergySumMap_[(*hRecHits)[RecHitIndex[id]].id().rawId()];
+
        IEta[PulseCount] = id.ieta();
        IPhi[PulseCount] = id.iphi();
        Depth[PulseCount] = id.depth();
@@ -335,7 +339,9 @@ HcalAnalyzer::beginJob()
       OutputTree->Branch("Charge", &Charge, "Charge[5184][10]/D");
       OutputTree->Branch("Pedestal", &Pedestal, "Pedestal[5184][10]/D");
       OutputTree->Branch("Gain", &Gain, "Gain[5184][10]/D");
-      OutputTree->Branch("SimHitEnergy", &SimHitEnergy, "SimHitEnergy[5184]/D");
+      
+      if(!IsData_) OutputTree->Branch("SimHitEnergy", &SimHitEnergy, "SimHitEnergy[5184]/D");
+      
       OutputTree->Branch("IEta", &IEta, "IEta[5184]/I");
       OutputTree->Branch("IPhi", &IPhi, "IPhi[5184]/I");
       OutputTree->Branch("Depth", &Depth, "Depth[5184]/I");
@@ -385,7 +391,7 @@ void HcalAnalyzer::ClearVariables()
 	  Pedestal[i][j] = 0;
 	}
 
-      SimHitEnergy[i] = 0;
+      if(!IsData_) SimHitEnergy[i] = 0;
       IEta[i] = 0;
       IPhi[i] = 0;
       Depth[i] = 0;
