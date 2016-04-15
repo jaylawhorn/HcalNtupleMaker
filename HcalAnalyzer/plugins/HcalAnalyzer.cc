@@ -71,6 +71,16 @@ using namespace std;
 #include "DataFormats/METReco/interface/HcalNoiseRBX.h"
 #include "RecoMET/METAlgorithms/interface/HcalHPDRBXMap.h"
 
+// Trigger
+#include "DataFormats/Common/interface/TriggerResults.h"
+#include "DataFormats/HLTReco/interface/TriggerObject.h"
+#include "DataFormats/HLTReco/interface/TriggerEvent.h"
+#include "DataFormats/HLTReco/interface/TriggerEventWithRefs.h"
+
+#include "FWCore/Common/interface/TriggerNames.h"
+
+const int NUM_TRIGGERS_MAX = 500;
+
 //--------------------------------------------------------------------------- 
 class HcalNtuplelizer;
 //--------------------------------------------------------------------------- 
@@ -100,6 +110,10 @@ private:
   string sHBHERecHitCollection;   // Name of the HBHE rechit collection        
   edm::Service<TFileService> FileService;
 
+  edm::EDGetTokenT<edm::TriggerResults> triggerResults_;
+  std::string triggerPath_;
+  edm::InputTag triggerFilter_;
+
   // Basic event coordinates                                                   
   long long RunNumber;
   long long EventNumber;
@@ -119,17 +133,17 @@ private:
   int Depth[5184];
 
   // Summary variables for baseline Hcal noise filter                           
-  int HPDHits;
-  int HPDNoOtherHits;
-  int MaxZeros;
-  double MinE2E10;
-  double MaxE2E10;
-  bool HasBadRBXR45;
-  bool HasBadRBXRechitR45Loose;
-  bool HasBadRBXRechitR45Tight;
+  //int HPDHits;
+  //int HPDNoOtherHits;
+  //int MaxZeros;
+  //double MinE2E10;
+  //double MaxE2E10;
+  //bool HasBadRBXR45;
+  //bool HasBadRBXRechitR45Loose;
+  //bool HasBadRBXRechitR45Tight;
 
   // Official decision from the baseline hcal noise filter                      
-  bool OfficialDecision;
+  //bool OfficialDecision;
   
 private:
   TTree *OutputTree;
@@ -148,9 +162,11 @@ HcalAnalyzer::HcalAnalyzer(const edm::ParameterSet& iConfig)
   FillHBHE = iConfig.getUntrackedParameter<bool>("FillHBHE", true);
   TotalChargeThreshold = iConfig.getUntrackedParameter<double>("TotalChargeThreshold", 0);
   
-  sHBHERecHitCollection = iConfig.getUntrackedParameter<string>("HBHERecHits","hbhereco");
+  sHBHERecHitCollection = iConfig.getUntrackedParameter<string>("HBHERecHits","hbheprereco");
 
   IsData_ = iConfig.getUntrackedParameter<bool>("IsData");
+
+  triggerResults_ = consumes<edm::TriggerResults>(iConfig.getParameter<edm::InputTag>("TriggerResults"));
 }
 
 
@@ -183,12 +199,46 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    iSetup.get<CaloGeometryRecord>().get(hGeometry);
    Geometry = hGeometry.product();
 
-   Handle<HcalNoiseSummary> hSummary;
-   iEvent.getByLabel("hcalnoise", hSummary);
+   //Handle<HcalNoiseSummary> hSummary;
+   //iEvent.getByLabel("hcalnoise", hSummary);
 
-   Handle<bool> hNoiseResult;
-   iEvent.getByLabel(InputTag("HBHENoiseFilterResultProducer", "HBHENoiseFilterResult"), hNoiseResult);
-   OfficialDecision = *hNoiseResult;
+   //Handle<bool> hNoiseResult;
+   //iEvent.getByLabel(InputTag("HBHENoiseFilterResultProducer", "HBHENoiseFilterResult"), hNoiseResult);
+   //OfficialDecision = *hNoiseResult;
+
+   Handle<TriggerResults> hltresults;
+
+   iEvent.getByToken(triggerResults_,hltresults);
+   if (!hltresults.isValid()) {
+     LogError("HcalAnalyzer") << "invalid collection!" << "\n";
+     return;
+   }
+
+   const TriggerNames& trigNames = iEvent.triggerNames(*hltresults);
+   
+   uint numTriggers = trigNames.size();
+
+   bool passTrig= false;
+
+   for (uint hltIndex=0; hltIndex<numTriggers; ++hltIndex) {
+     if (hltIndex > NUM_TRIGGERS_MAX) break; //avoid memory leaks from too many triggers
+     
+     if (trigNames.triggerName(hltIndex).find("HLT_ZeroBias_IsolatedBunches") != string::npos && hltresults->wasrun(hltIndex) && hltresults->accept(hltIndex)) passTrig=true;
+     
+   }
+   
+   if (passTrig==false) return;
+   
+   //loop over triggers
+   //for( unsigned int hltIndex=0; hltIndex<numTriggers; ++hltIndex ){
+   //  if (hltIndex > NUM_TRIGGERS_MAX) break; //avoid memory leaks from too many triggers
+   //
+   //  if (hltresults->wasrun(hltIndex)) {
+   //    std::cout << hltIndex << " " << trigNames.triggerName(hltIndex) << endl;
+   //  }
+   //  //myTriggerNames->push_back(trigNames.triggerName(hltIndex));
+   //  if (hltresults->wasrun(hltIndex) && hltresults->accept(hltIndex)) std::cout << "passed" << endl;
+   //}
 
    // basic event coordinates                                                                                                                                                                               
    RunNumber = iEvent.id().run();
@@ -292,14 +342,14 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
    // hcal sumamry objects               
 
-   HPDHits = hSummary->maxHPDHits();
-   HPDNoOtherHits = hSummary->maxHPDNoOtherHits();
-   MaxZeros = hSummary->maxZeros();
-   MinE2E10 = hSummary->minE2Over10TS();
-   MaxE2E10 = hSummary->maxE2Over10TS();
-   HasBadRBXR45 = hSummary->HasBadRBXTS4TS5();
-   HasBadRBXRechitR45Loose = hSummary->HasBadRBXRechitR45Loose();
-   HasBadRBXRechitR45Tight = hSummary->HasBadRBXRechitR45Tight();
+   //HPDHits = hSummary->maxHPDHits();
+   //HPDNoOtherHits = hSummary->maxHPDNoOtherHits();
+   //MaxZeros = hSummary->maxZeros();
+   //MinE2E10 = hSummary->minE2Over10TS();
+   //MaxE2E10 = hSummary->maxE2Over10TS();
+   //HasBadRBXR45 = hSummary->HasBadRBXTS4TS5();
+   //HasBadRBXRechitR45Loose = hSummary->HasBadRBXRechitR45Loose();
+   //HasBadRBXRechitR45Tight = hSummary->HasBadRBXRechitR45Tight();
 
    // finally actually fill the tree
 
@@ -322,16 +372,16 @@ HcalAnalyzer::beginJob()
   OutputTree->Branch("Orbit", &Orbit, "Orbit/LL");
   OutputTree->Branch("Time", &Time, "Time/LL");
 
-  OutputTree->Branch("HPDHits", &HPDHits, "HPDHits/I");
-  OutputTree->Branch("HPDNoOtherHits", &HPDNoOtherHits, "HPDNoOtherHits/I");
-  OutputTree->Branch("MaxZeros", &MaxZeros, "MaxZeros/I");
-  OutputTree->Branch("MinE2E10", &MinE2E10, "MinE2E10/D");
-  OutputTree->Branch("MaxE2E10", &MaxE2E10, "MaxE2E10/D");
-  OutputTree->Branch("HasBadRBXR45", &HasBadRBXR45, "HasBadRBXR45/O");
-  OutputTree->Branch("HasBadRBXRechitR45Loose", &HasBadRBXRechitR45Loose, "HasBadRBXRechitR45Loose/O");
-  OutputTree->Branch("HasBadRBXRechitR45Tight", &HasBadRBXRechitR45Tight, "HasBadRBXRechitR45Tight/O");
+  //OutputTree->Branch("HPDHits", &HPDHits, "HPDHits/I");
+  //OutputTree->Branch("HPDNoOtherHits", &HPDNoOtherHits, "HPDNoOtherHits/I");
+  //OutputTree->Branch("MaxZeros", &MaxZeros, "MaxZeros/I");
+  //OutputTree->Branch("MinE2E10", &MinE2E10, "MinE2E10/D");
+  //OutputTree->Branch("MaxE2E10", &MaxE2E10, "MaxE2E10/D");
+  //OutputTree->Branch("HasBadRBXR45", &HasBadRBXR45, "HasBadRBXR45/O");
+  //OutputTree->Branch("HasBadRBXRechitR45Loose", &HasBadRBXRechitR45Loose, "HasBadRBXRechitR45Loose/O");
+  //OutputTree->Branch("HasBadRBXRechitR45Tight", &HasBadRBXRechitR45Tight, "HasBadRBXRechitR45Tight/O");
 
-  OutputTree->Branch("OfficialDecision", &OfficialDecision, "OfficialDecision/O");
+  //OutputTree->Branch("OfficialDecision", &OfficialDecision, "OfficialDecision/O");
 
   if(FillHBHE == true)
     {
@@ -398,16 +448,16 @@ void HcalAnalyzer::ClearVariables()
 
     }
 
-  HPDHits = 0;
-  HPDNoOtherHits = 0;
-  MaxZeros = 0;
-  MinE2E10 = 0;
-  MaxE2E10 = 0;
-  HasBadRBXR45 = false;
-  HasBadRBXRechitR45Loose = false;
-  HasBadRBXRechitR45Tight = false;
+  //HPDHits = 0;
+  //HPDNoOtherHits = 0;
+  //MaxZeros = 0;
+  //MinE2E10 = 0;
+  //MaxE2E10 = 0;
+  //HasBadRBXR45 = false;
+  //HasBadRBXRechitR45Loose = false;
+  //HasBadRBXRechitR45Tight = false;
 
-  OfficialDecision = false;
+  //OfficialDecision = false;
 
 }
 
