@@ -199,13 +199,6 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    iSetup.get<CaloGeometryRecord>().get(hGeometry);
    Geometry = hGeometry.product();
 
-   //Handle<HcalNoiseSummary> hSummary;
-   //iEvent.getByLabel("hcalnoise", hSummary);
-
-   //Handle<bool> hNoiseResult;
-   //iEvent.getByLabel(InputTag("HBHENoiseFilterResultProducer", "HBHENoiseFilterResult"), hNoiseResult);
-   //OfficialDecision = *hNoiseResult;
-
    Handle<TriggerResults> hltresults;
 
    iEvent.getByToken(triggerResults_,hltresults);
@@ -216,16 +209,18 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
    const TriggerNames& trigNames = iEvent.triggerNames(*hltresults);
    
-   uint numTriggers = trigNames.size();
+   //uint numTriggers = trigNames.size();
 
-   bool passTrig= false;
+   bool passTrig= true;
 
-   for (uint hltIndex=0; hltIndex<numTriggers; ++hltIndex) {
-     if (hltIndex > NUM_TRIGGERS_MAX) break; //avoid memory leaks from too many triggers
-     
-     if (trigNames.triggerName(hltIndex).find("HLT_ZeroBias_IsolatedBunches") != string::npos && hltresults->wasrun(hltIndex) && hltresults->accept(hltIndex)) passTrig=true;
-     
-   }
+   //bool passTrig= false;
+
+   //for (uint hltIndex=0; hltIndex<numTriggers; ++hltIndex) {
+   //  if (hltIndex > NUM_TRIGGERS_MAX) break; //avoid memory leaks from too many triggers
+   //  
+   //  if (trigNames.triggerName(hltIndex).find("HLT_ZeroBias_IsolatedBunches") != string::npos && hltresults->wasrun(hltIndex) && hltresults->accept(hltIndex)) passTrig=true;
+   //  
+   //}
    
    if (passTrig==false) return;
    
