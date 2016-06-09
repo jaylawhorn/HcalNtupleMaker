@@ -104,10 +104,13 @@ private:
   std::map<int, double> hitEnergySumMap_;
   HcalSimParameterMap simParameterMap_;
 
+  //edm::EDGetTokenT<HBHERecHitCollection> tok_hbhe_;
+  edm::EDGetTokenT<HBHERecHitCollection> tok_hbhe_;
+  edm::EDGetTokenT<HBHEDigiCollection> tok_hbhe_digi_;
+
   bool FillHBHE;                  // Whether to store HBHE digi-level information or not                                                                      
   bool IsData_;  
   double TotalChargeThreshold;    // To avoid trees from overweight, only store digis above some threshold                                                    
-  string sHBHERecHitCollection;   // Name of the HBHE rechit collection        
   edm::Service<TFileService> FileService;
 
   edm::EDGetTokenT<edm::TriggerResults> triggerResults_;
@@ -162,7 +165,9 @@ HcalAnalyzer::HcalAnalyzer(const edm::ParameterSet& iConfig)
   FillHBHE = iConfig.getUntrackedParameter<bool>("FillHBHE", true);
   TotalChargeThreshold = iConfig.getUntrackedParameter<double>("TotalChargeThreshold", 0);
   
-  sHBHERecHitCollection = iConfig.getUntrackedParameter<string>("HBHERecHits","hbheprereco");
+  //tok_hbhe_ = consumes<edm::SortedCollection<HBHERecHit,edm::StrictWeakOrdering<HBHERecHit>>>(iConfig.getParameter<edm::InputTag>("hbheInput"));
+  tok_hbhe_ = consumes<HBHERecHitCollection>(iConfig.getParameter<edm::InputTag>("hbheInput"));
+  tok_hbhe_digi_ = consumes<HBHEDigiCollection>(edm::InputTag("hcalDigis",""));
 
   IsData_ = iConfig.getUntrackedParameter<bool>("IsData");
 
@@ -182,12 +187,17 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
    ClearVariables();
 
-   // get stuff                                                                                                                                                                                             
+   // get stuff                                                                                                                                                                            
+                 
    Handle<HBHERecHitCollection> hRecHits;
-   iEvent.getByLabel(InputTag(sHBHERecHitCollection), hRecHits);
+   //Handle<edm::SortedCollection<HBHERecHit,edm::StrictWeakOrdering<HBHERecHit>>> hRecHits;
+   //iEvent.getByLabel(InputTag(sHBHERecHitCollection, "RERECO"), hRecHits);
+   iEvent.getByToken(tok_hbhe_, hRecHits);
 
    Handle<HBHEDigiCollection> hHBHEDigis;
-   iEvent.getByLabel(InputTag("hcalDigis"), hHBHEDigis);
+   //iEvent.getByLabel(InputTag("hcalDigis"), hHBHEDigis);
+
+   iEvent.getByToken(tok_hbhe_digi_, hHBHEDigis);
 
    Handle<PCaloHitContainer> hSimHits;
    iEvent.getByLabel("g4SimHits","HcalHits",hSimHits);
@@ -218,16 +228,16 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    
    uint numTriggers = trigNames.size();
 
-   bool passTrig= false;
-
-   for (uint hltIndex=0; hltIndex<numTriggers; ++hltIndex) {
-     if (hltIndex > NUM_TRIGGERS_MAX) break; //avoid memory leaks from too many triggers
-     
-     if (trigNames.triggerName(hltIndex).find("HLT_ZeroBias_IsolatedBunches") != string::npos && hltresults->wasrun(hltIndex) && hltresults->accept(hltIndex)) passTrig=true;
-     
-   }
-   
-   if (passTrig==false) return;
+   //bool passTrig= false;
+   //
+   //for (uint hltIndex=0; hltIndex<numTriggers; ++hltIndex) {
+   //  if (hltIndex > NUM_TRIGGERS_MAX) break; //avoid memory leaks from too many triggers
+   //  
+   //  if (trigNames.triggerName(hltIndex).find("HLT_ZeroBias_IsolatedBunches") != string::npos && hltresults->wasrun(hltIndex) && hltresults->accept(hltIndex)) passTrig=true;
+   //  
+   //}
+   //
+   //if (passTrig==false) return;
    
    //loop over triggers
    //for( unsigned int hltIndex=0; hltIndex<numTriggers; ++hltIndex ){
