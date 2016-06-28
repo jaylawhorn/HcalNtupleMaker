@@ -82,7 +82,7 @@ process.configurationMetadata = cms.untracked.PSet(
 )
 
 process.TFileService = cms.Service("TFileService",
-  fileName = cms.string("/afs/cern.ch/work/j/jlawhorn/HCALTree.root")
+  fileName = cms.string("HCALTree.root")
 )
 process.ExportTree = cms.EDAnalyzer("HcalAnalyzer",
   hbheInput = cms.InputTag('hbheprereco'),
