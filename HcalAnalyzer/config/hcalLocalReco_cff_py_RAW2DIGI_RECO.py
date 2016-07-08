@@ -25,9 +25,11 @@ process.maxEvents = cms.untracked.PSet(
 
 # Input source
 process.source = cms.Source("PoolSource",
-    fileNames = cms.untracked.vstring('/store/data/Run2016B/HLTPhysics/RAW/v1/000/272/762/00000/688B49D6-E613-E611-9849-02163E012611.root'),
-#    fileNames = cms.untracked.vstring('file:/afs/cern.ch/work/s/sabrandt/public/Samples/pickevents_RAW_merged_50ns.root'),
-#    fileNames = cms.untracked.vstring('/store/data/Run2015E/HighPtJet80/RAW/v1/000/261/395/00000/B69F2D67-5F8D-E511-9E1F-02163E013904.root'),
+    fileNames = cms.untracked.vstring(
+        '/store/data/Run2016B/ZeroBias/RAW/v2/000/274/971/00000/E037CF80-C530-E611-82F7-02163E014434.root'),
+        #'root://xrootd-cms.infn.it//store/data/Run2016B/HLTPhysics/RAW/v1/000/272/762/00000/688B49D6-E613-E611-9849-02163E012611.root'),
+        #    fileNames = cms.untracked.vstring('file:/afs/cern.ch/work/s/sabrandt/public/Samples/pickevents_RAW_merged_50ns.root'),
+        #    fileNames = cms.untracked.vstring('/store/data/Run2015E/HighPtJet80/RAW/v1/000/261/395/00000/B69F2D67-5F8D-E511-9E1F-02163E013904.root'),
 )
 
 process.options = cms.untracked.PSet(
@@ -73,7 +75,7 @@ process.TFileService = cms.Service("TFileService",
   fileName = cms.string("HCALTree.root")
 )
 process.ExportTree = cms.EDAnalyzer("HcalAnalyzer",
-  HBHERecHitCollection = cms.untracked.string('hbheprereco'),
+  hbheInput = cms.InputTag('hbheprereco'), 
   IsData = cms.untracked.bool(True),
   TriggerResults = cms.InputTag('TriggerResults','','HLT'),
   TotalChargeThreshold = cms.untracked.double(-9999)
@@ -98,7 +100,7 @@ process.ExportTree = cms.EDAnalyzer("HcalAnalyzer",
 
 # Other statements
 from Configuration.AlCa.GlobalTag import GlobalTag
-process.GlobalTag = GlobalTag(process.GlobalTag, 'GR_P_V56::All', '')
+process.GlobalTag = GlobalTag(process.GlobalTag, '80X_dataRun2_Prompt_v8', '')
 
 # Path and EndPath definitions
 process.raw2digi_step = cms.Path(process.RawToDigi)
