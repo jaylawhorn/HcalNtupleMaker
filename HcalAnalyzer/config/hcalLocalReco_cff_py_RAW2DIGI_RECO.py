@@ -20,14 +20,16 @@ process.load('Configuration.StandardSequences.EndOfProcess_cff')
 process.load('Configuration.StandardSequences.FrontierConditions_GlobalTag_cff')
 
 process.maxEvents = cms.untracked.PSet(
-    input = cms.untracked.int32(1000)
+    input = cms.untracked.int32(-1)
 )
 
 # Input source
 process.source = cms.Source("PoolSource",
-    fileNames = cms.untracked.vstring('root://xrootd-cms.infn.it//store/data/Run2016B/HLTPhysics/RAW/v1/000/272/762/00000/688B49D6-E613-E611-9849-02163E012611.root'),
-#    fileNames = cms.untracked.vstring('file:/afs/cern.ch/work/s/sabrandt/public/Samples/pickevents_RAW_merged_50ns.root'),
-#    fileNames = cms.untracked.vstring('/store/data/Run2015E/HighPtJet80/RAW/v1/000/261/395/00000/B69F2D67-5F8D-E511-9E1F-02163E013904.root'),
+    fileNames = cms.untracked.vstring(
+        '/store/data/Run2016B/ZeroBias/RAW/v2/000/274/971/00000/E037CF80-C530-E611-82F7-02163E014434.root'),
+        #'root://xrootd-cms.infn.it//store/data/Run2016B/HLTPhysics/RAW/v1/000/272/762/00000/688B49D6-E613-E611-9849-02163E012611.root'),
+        #    fileNames = cms.untracked.vstring('file:/afs/cern.ch/work/s/sabrandt/public/Samples/pickevents_RAW_merged_50ns.root'),
+        #    fileNames = cms.untracked.vstring('/store/data/Run2015E/HighPtJet80/RAW/v1/000/261/395/00000/B69F2D67-5F8D-E511-9E1F-02163E013904.root'),
 )
 
 process.options = cms.untracked.PSet(

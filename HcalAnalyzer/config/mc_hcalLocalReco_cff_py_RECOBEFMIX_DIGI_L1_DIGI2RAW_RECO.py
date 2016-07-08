@@ -33,7 +33,8 @@ process.maxEvents = cms.untracked.PSet(
 # Input source
 process.source = cms.Source("PoolSource",
     dropDescendantsOfDroppedBranches = cms.untracked.bool(False),
-    fileNames = cms.untracked.vstring('file:/afs/cern.ch/work/j/jlawhorn/QCD_Pt-15to7000_TuneCUETP8M1_Flat_13TeV_pythia8-GEN-SIM.root',
+    fileNames = cms.untracked.vstring(
+        'file:/afs/cern.ch/work/j/jlawhorn/QCD_Pt-15to7000_TuneCUETP8M1_Flat_13TeV_pythia8-GEN-SIM.root',
                                       ),
     inputCommands = cms.untracked.vstring('keep *', 
         'drop *_genParticles_*_*', 
