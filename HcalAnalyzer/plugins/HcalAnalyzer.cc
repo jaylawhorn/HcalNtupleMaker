@@ -66,6 +66,7 @@ using namespace std;
 #include "SimDataFormats/CaloHit/interface/PCaloHit.h"
 #include "SimDataFormats/CaloHit/interface/PCaloHitContainer.h"
 #include "SimCalorimetry/HcalSimAlgos/interface/HcalSimParameterMap.h"
+#include "SimDataFormats/CrossingFrame/interface/MixCollection.h"
 
 #include "DataFormats/METReco/interface/HcalNoiseSummary.h"
 #include "DataFormats/METReco/interface/HcalNoiseRBX.h"
@@ -103,10 +104,11 @@ private:
 private:
   std::map<int, double> hitEnergySumMap_;
   HcalSimParameterMap simParameterMap_;
+  //MixCollection<PCaloHit> &simHits_;
 
-  //edm::EDGetTokenT<HBHERecHitCollection> tok_hbhe_;
   edm::EDGetTokenT<HBHERecHitCollection> tok_hbhe_;
   edm::EDGetTokenT<HBHEDigiCollection> tok_hbhe_digi_;
+  edm::EDGetTokenT<edm::PCaloHitContainer> toks_calo_;
 
   bool FillHBHE;                  // Whether to store HBHE digi-level information or not                                                                      
   bool IsData_;  
@@ -165,13 +167,13 @@ HcalAnalyzer::HcalAnalyzer(const edm::ParameterSet& iConfig)
   FillHBHE = iConfig.getUntrackedParameter<bool>("FillHBHE", true);
   TotalChargeThreshold = iConfig.getUntrackedParameter<double>("TotalChargeThreshold", 0);
   
-  //tok_hbhe_ = consumes<edm::SortedCollection<HBHERecHit,edm::StrictWeakOrdering<HBHERecHit>>>(iConfig.getParameter<edm::InputTag>("hbheInput"));
   tok_hbhe_ = consumes<HBHERecHitCollection>(iConfig.getParameter<edm::InputTag>("hbheInput"));
   tok_hbhe_digi_ = consumes<HBHEDigiCollection>(edm::InputTag("hcalDigis",""));
+  toks_calo_ = consumes<edm::PCaloHitContainer>(edm::InputTag("g4SimHits","HcalHits"));
 
   IsData_ = iConfig.getUntrackedParameter<bool>("IsData");
 
-  triggerResults_ = consumes<edm::TriggerResults>(iConfig.getParameter<edm::InputTag>("TriggerResults"));
+  //triggerResults_ = consumes<edm::TriggerResults>(iConfig.getParameter<edm::InputTag>("TriggerResults"));
 }
 
 
@@ -183,60 +185,63 @@ HcalAnalyzer::~HcalAnalyzer()
 void
 HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 {
-   using namespace edm;
+  using namespace edm;
+  
+  ClearVariables();
+  
+  // get stuff                                                                                                                                               
+  
+  Handle<HBHERecHitCollection> hRecHits;
+  //Handle<edm::SortedCollection<HBHERecHit,edm::StrictWeakOrdering<HBHERecHit>>> hRecHits;
+  //iEvent.getByLabel(InputTag(sHBHERecHitCollection, "RERECO"), hRecHits);
+  iEvent.getByToken(tok_hbhe_, hRecHits);
+  
+  Handle<HBHEDigiCollection> hHBHEDigis;
+  //iEvent.getByLabel(InputTag("hcalDigis"), hHBHEDigis);
+  
+  iEvent.getByToken(tok_hbhe_digi_, hHBHEDigis);
+  
+  //++PCaloHits "g4SimHits" "HcalHits" "SIM" (productId = 1:13)
+  
+  Handle<PCaloHitContainer> hSimHits;
+  //iEvent.getByToken(tok_hbhe_sim_, hSimHits);
+  iEvent.getByLabel("g4SimHits","HcalHits",hSimHits);
 
-   ClearVariables();
-
-   // get stuff                                                                                                                                                                            
-                 
-   Handle<HBHERecHitCollection> hRecHits;
-   //Handle<edm::SortedCollection<HBHERecHit,edm::StrictWeakOrdering<HBHERecHit>>> hRecHits;
-   //iEvent.getByLabel(InputTag(sHBHERecHitCollection, "RERECO"), hRecHits);
-   iEvent.getByToken(tok_hbhe_, hRecHits);
-
-   Handle<HBHEDigiCollection> hHBHEDigis;
-   //iEvent.getByLabel(InputTag("hcalDigis"), hHBHEDigis);
-
-   iEvent.getByToken(tok_hbhe_digi_, hHBHEDigis);
-
-   Handle<PCaloHitContainer> hSimHits;
-   iEvent.getByLabel("g4SimHits","HcalHits",hSimHits);
-
-   ESHandle<HcalDbService> hConditions;
-   iSetup.get<HcalDbRecord>().get(hConditions);
-
-   ESHandle<CaloGeometry> hGeometry;
-   iSetup.get<CaloGeometryRecord>().get(hGeometry);
-   Geometry = hGeometry.product();
-
-   Handle<TriggerResults> hltresults;
-
-   iEvent.getByToken(triggerResults_,hltresults);
-   if (!hltresults.isValid()) {
-     LogError("HcalAnalyzer") << "invalid collection!" << "\n";
-     return;
-   }
-
-   const TriggerNames& trigNames = iEvent.triggerNames(*hltresults);
-   
-   //uint numTriggers = trigNames.size();
-
-   //bool passTrig= false;
-   //
-   //if (passTrig==false) return;
-   
-   //loop over triggers
-   //for( unsigned int hltIndex=0; hltIndex<numTriggers; ++hltIndex ){
-   //  if (hltIndex > NUM_TRIGGERS_MAX) break; //avoid memory leaks from too many triggers
-   //
-   //  if (hltresults->wasrun(hltIndex)) {
-   //    std::cout << hltIndex << " " << trigNames.triggerName(hltIndex) << endl;
-   //  }
-   //  //myTriggerNames->push_back(trigNames.triggerName(hltIndex));
-   //  if (hltresults->wasrun(hltIndex) && hltresults->accept(hltIndex)) std::cout << "passed" << endl;
-   //}
-
-   // basic event coordinates                                                                                                                                                                               
+  ESHandle<HcalDbService> hConditions;
+  iSetup.get<HcalDbRecord>().get(hConditions);
+  
+  ESHandle<CaloGeometry> hGeometry;
+  iSetup.get<CaloGeometryRecord>().get(hGeometry);
+  Geometry = hGeometry.product();
+  
+  Handle<TriggerResults> hltresults;
+  
+  //iEvent.getByToken(triggerResults_,hltresults);
+  //if (!hltresults.isValid()) {
+  //  LogError("HcalAnalyzer") << "invalid collection!" << "\n";
+  //  return;
+  //}
+  
+  //const TriggerNames& trigNames = iEvent.triggerNames(*hltresults);
+  
+  //uint numTriggers = trigNames.size();
+  
+  //bool passTrig= false;
+  //
+  //if (passTrig==false) return;
+  
+  //loop over triggers
+  //for( unsigned int hltIndex=0; hltIndex<numTriggers; ++hltIndex ){
+  //  if (hltIndex > NUM_TRIGGERS_MAX) break; //avoid memory leaks from too many triggers
+  //
+  //  if (hltresults->wasrun(hltIndex)) {
+  //    std::cout << hltIndex << " " << trigNames.triggerName(hltIndex) << endl;
+  //  }
+  //  //myTriggerNames->push_back(trigNames.triggerName(hltIndex));
+  //  if (hltresults->wasrun(hltIndex) && hltresults->accept(hltIndex)) std::cout << "passed" << endl;
+  //}
+  
+  // basic event coordinates                                                                                                                                                                               
    RunNumber = iEvent.id().run();
    EventNumber = iEvent.id().event();
    LumiSection = iEvent.luminosityBlock();
@@ -280,7 +285,9 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
        }
    }
    
-   // HBHE rechit maps - we want to link rechits and digis together                                                                                                                                         
+   // HBHE rechit maps - we want to link rechits and digis together                                                                                                                    
+
+   std::cout <<  hRecHits->size() << std::endl;
    map<HcalDetId, int> RecHitIndex;
    for(int i = 0; i < (int)hRecHits->size(); i++)
      {
