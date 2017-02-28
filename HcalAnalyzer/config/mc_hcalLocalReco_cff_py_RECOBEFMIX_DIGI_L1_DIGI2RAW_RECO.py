@@ -34,7 +34,7 @@ process.maxEvents = cms.untracked.PSet(
 process.source = cms.Source("PoolSource",
     dropDescendantsOfDroppedBranches = cms.untracked.bool(False),
     fileNames = cms.untracked.vstring(
-        'file:/afs/cern.ch/work/j/jlawhorn/QCD_Pt-15to7000_TuneCUETP8M1_Flat_13TeV_pythia8-GEN-SIM.root',
+        'file:/afs/cern.ch/work/j/jlawhorn/public/14-02-2017-pulse-shapes/CMSSW_9_0_X_wat/src/step1.root'
                                       ),
     inputCommands = cms.untracked.vstring('keep *', 
         'drop *_genParticles_*_*', 
@@ -94,20 +94,6 @@ process.ExportTree = cms.EDAnalyzer("HcalAnalyzer",
 
 # Output definition
 
-#process.AODSIMoutput = cms.OutputModule("PoolOutputModule",
-#    compressionAlgorithm = cms.untracked.string('LZMA'),
-#    compressionLevel = cms.untracked.int32(4),
-#    dataset = cms.untracked.PSet(
-#        dataTier = cms.untracked.string('AODSIM'),
-#        filterName = cms.untracked.string('')
-#    ),
-#    eventAutoFlushCompressedSize = cms.untracked.int32(15728640),
-#    fileName = cms.untracked.string('file:SUS-RunIISpring16FSPremixDR-00001.root'),
-#    outputCommands = process.AODSIMEventContent.outputCommands
-#)
-
-# Additional output definition
-
 # Other statements
 from HLTrigger.Configuration.CustomConfigs import ProcessName
 process = ProcessName(process)
@@ -120,23 +106,17 @@ process.reco_step1 = cms.Path(process.hcalLocalRecoSequence)
 process.reco_step2 = cms.Path(process.ExportTree)
 process.endjob_step = cms.EndPath(process.endOfProcess)
 
-#process.schedule = cms.Schedule(process.raw2digi_step,process.reco_step1,process.reco_step2,process.endjob_step)
-
+process.mix.digitizers.hcal.ignoreGeantTime = cms.bool(True)
+process.mix.digitizers.hcal.he.doPhotoStatistics = cms.bool(False)
+process.mix.digitizers.hcal.doNoise = cms.bool(False)
 
 # Path and EndPath definitions
 process.reconstruction_befmix_step = cms.Path(process.reconstruction_befmix)
 process.digitisation_step = cms.Path(process.pdigi)
 process.L1simulation_step = cms.Path(process.SimL1Emulator)
 process.digi2raw_step = cms.Path(process.DigiToRaw)
-#process.L1Reco_step = cms.Path(process.L1Reco)
-#process.reconstruction_step = cms.Path(process.reconstruction)
-#process.endjob_step = cms.EndPath(process.endOfProcess)
-#process.AODSIMoutput_step = cms.EndPath(process.AODSIMoutput)
 
 # Schedule definition
-#process.schedule = cms.Schedule(process.reconstruction_befmix_step,process.digitisation_step,process.L1simulation_step,process.digi2raw_step,process.L1Reco_step,process.reconstruction_step)
-#process.schedule.extend(process.HLTSchedule)
-#process.schedule.extend([process.endjob_step,process.AODSIMoutput_step])
 
 process.schedule = cms.Schedule(process.reconstruction_befmix_step,process.digitisation_step,process.L1simulation_step,process.digi2raw_step,process.raw2digi_step,process.reco_step1,process.reco_step2,process.endjob_step)
 

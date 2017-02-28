@@ -47,6 +47,8 @@ using namespace std;
 #include "CondFormats/HcalObjects/interface/HcalRecoParams.h"
 #include "CondFormats/HcalObjects/interface/HcalRecoParam.h"
 #include "CalibCalorimetry/HcalAlgos/interface/HcalDbASCIIIO.h"
+#include "Geometry/HcalCommonData/interface/HcalHitRelabeller.h"
+#include "Geometry/HcalCommonData/interface/HcalDDDRecConstants.h"
 
 #include "DataFormats/HcalDetId/interface/HcalDetId.h"
 #include "DataFormats/HcalRecHit/interface/HcalRecHitCollections.h"
@@ -104,18 +106,16 @@ private:
   std::map<int, double> hitEnergySumMap_;
   HcalSimParameterMap simParameterMap_;
 
-  //edm::EDGetTokenT<HBHERecHitCollection> tok_hbhe_;
   edm::EDGetTokenT<HBHERecHitCollection> tok_hbhe_;
   edm::EDGetTokenT<HBHEDigiCollection> tok_hbhe_digi_;
-
+  edm::EDGetTokenT<edm::PCaloHitContainer> tok_hbhe_sim_;
+  
   bool FillHBHE;                  // Whether to store HBHE digi-level information or not                                                                      
   bool IsData_;  
   double TotalChargeThreshold;    // To avoid trees from overweight, only store digis above some threshold                                                    
   edm::Service<TFileService> FileService;
 
-  edm::EDGetTokenT<edm::TriggerResults> triggerResults_;
-  std::string triggerPath_;
-  edm::InputTag triggerFilter_;
+  const HcalDDDRecConstants *hcons;
 
   // Basic event coordinates                                                   
   long long RunNumber;
@@ -131,22 +131,11 @@ private:
   double Pedestal[5184][10];
   double Gain[5184][10];
   double SimHitEnergy[5184];
+  double Method3Energy[5184];
+  double Method2Energy[5184];
   int IEta[5184];
   int IPhi[5184];
   int Depth[5184];
-
-  // Summary variables for baseline Hcal noise filter                           
-  //int HPDHits;
-  //int HPDNoOtherHits;
-  //int MaxZeros;
-  //double MinE2E10;
-  //double MaxE2E10;
-  //bool HasBadRBXR45;
-  //bool HasBadRBXRechitR45Loose;
-  //bool HasBadRBXRechitR45Tight;
-
-  // Official decision from the baseline hcal noise filter                      
-  //bool OfficialDecision;
   
 private:
   TTree *OutputTree;
@@ -165,13 +154,11 @@ HcalAnalyzer::HcalAnalyzer(const edm::ParameterSet& iConfig)
   FillHBHE = iConfig.getUntrackedParameter<bool>("FillHBHE", true);
   TotalChargeThreshold = iConfig.getUntrackedParameter<double>("TotalChargeThreshold", 0);
   
-  //tok_hbhe_ = consumes<edm::SortedCollection<HBHERecHit,edm::StrictWeakOrdering<HBHERecHit>>>(iConfig.getParameter<edm::InputTag>("hbheInput"));
   tok_hbhe_ = consumes<HBHERecHitCollection>(iConfig.getParameter<edm::InputTag>("hbheInput"));
   tok_hbhe_digi_ = consumes<HBHEDigiCollection>(edm::InputTag("hcalDigis",""));
+  tok_hbhe_sim_ = consumes<edm::PCaloHitContainer>(edm::InputTag("g4SimHits","HcalHits"));
 
   IsData_ = iConfig.getUntrackedParameter<bool>("IsData");
-
-  triggerResults_ = consumes<edm::TriggerResults>(iConfig.getParameter<edm::InputTag>("TriggerResults"));
 }
 
 
@@ -187,20 +174,21 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 
    ClearVariables();
 
-   // get stuff                                                                                                                                                                            
-                 
+   // get stuff
+
+   edm::ESHandle<HcalDDDRecConstants> pHRNDC;
+   iSetup.get<HcalRecNumberingRecord>().get( pHRNDC );
+   hcons = &(*pHRNDC);
+
    Handle<HBHERecHitCollection> hRecHits;
-   //Handle<edm::SortedCollection<HBHERecHit,edm::StrictWeakOrdering<HBHERecHit>>> hRecHits;
-   //iEvent.getByLabel(InputTag(sHBHERecHitCollection, "RERECO"), hRecHits);
    iEvent.getByToken(tok_hbhe_, hRecHits);
 
    Handle<HBHEDigiCollection> hHBHEDigis;
-   //iEvent.getByLabel(InputTag("hcalDigis"), hHBHEDigis);
 
    iEvent.getByToken(tok_hbhe_digi_, hHBHEDigis);
 
    Handle<PCaloHitContainer> hSimHits;
-   iEvent.getByLabel("g4SimHits","HcalHits",hSimHits);
+   iEvent.getByToken(tok_hbhe_sim_,hSimHits);
 
    ESHandle<HcalDbService> hConditions;
    iSetup.get<HcalDbRecord>().get(hConditions);
@@ -208,33 +196,6 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    ESHandle<CaloGeometry> hGeometry;
    iSetup.get<CaloGeometryRecord>().get(hGeometry);
    Geometry = hGeometry.product();
-
-   Handle<TriggerResults> hltresults;
-
-   iEvent.getByToken(triggerResults_,hltresults);
-   if (!hltresults.isValid()) {
-     LogError("HcalAnalyzer") << "invalid collection!" << "\n";
-     return;
-   }
-
-   const TriggerNames& trigNames = iEvent.triggerNames(*hltresults);
-   
-   //uint numTriggers = trigNames.size();
-
-   //bool passTrig= false;
-   //
-   //if (passTrig==false) return;
-   
-   //loop over triggers
-   //for( unsigned int hltIndex=0; hltIndex<numTriggers; ++hltIndex ){
-   //  if (hltIndex > NUM_TRIGGERS_MAX) break; //avoid memory leaks from too many triggers
-   //
-   //  if (hltresults->wasrun(hltIndex)) {
-   //    std::cout << hltIndex << " " << trigNames.triggerName(hltIndex) << endl;
-   //  }
-   //  //myTriggerNames->push_back(trigNames.triggerName(hltIndex));
-   //  if (hltresults->wasrun(hltIndex) && hltresults->accept(hltIndex)) std::cout << "passed" << endl;
-   //}
 
    // basic event coordinates                                                                                                                                                                               
    RunNumber = iEvent.id().run();
@@ -244,56 +205,16 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
    Orbit = iEvent.orbitNumber();
    Time = iEvent.time().value();
 
-   if(!IsData_) {
-     // store the energy of each hit in a map
-     hitEnergySumMap_.clear();
-     PCaloHitContainer::const_iterator hitItr = hSimHits->begin();
-     PCaloHitContainer::const_iterator last = hSimHits->end();
-     
-     for( ; hitItr != last; ++hitItr)
-       {
-	 HcalDetId hcalDetId(hitItr->id());
-	 
-	 if(hcalDetId.subdet()== HcalBarrel || hcalDetId.subdet() == HcalEndcap)
-	   {
-	     int id = hitItr->id();
-	     double samplingFactor=1.;
-	     if(hcalDetId.subdet()== HcalBarrel)
-	       {
-		 samplingFactor = simParameterMap_.hbParameters().samplingFactor(DetId(id));
-	       }
-	     else if(hcalDetId.subdet() == HcalEndcap)
-	       {
-		 samplingFactor = simParameterMap_.heParameters().samplingFactor(DetId(id));
-	       }
-	     double energy = hitItr->energy() * samplingFactor;
-	     // add it to the map
-	     std::map<int, double>::iterator mapItr = hitEnergySumMap_.find(id);
-	     if(mapItr == hitEnergySumMap_.end()) {
-	       hitEnergySumMap_[id] = energy;
-	     }
-	     else
-	       {
-		 hitEnergySumMap_[id] += energy;
-	       }
-	   }
-       }
-   }
-   
-   // HBHE rechit maps - we want to link rechits and digis together                                                                                                                                         
-   map<HcalDetId, int> RecHitIndex;
-   for(int i = 0; i < (int)hRecHits->size(); i++)
-     {
-       HcalDetId id = (*hRecHits)[i].id();
-       RecHitIndex.insert(pair<HcalDetId, int>(id, i));
-     }
 
-   // loop over digis                                                                                                                                                                                       
+   // loop over digis
    for(HBHEDigiCollection::const_iterator iter = hHBHEDigis->begin(); iter != hHBHEDigis->end(); iter++)
      {
        HcalDetId id = iter->id();
 
-       // First let's convert ADC to deposited charge                                                                                                                                                       
+       //temporary hack to remove SiPM wedge at HEP17
+       if (id.ieta()>14 && id.iphi()>=63 && id.iphi()<=66) continue;
+
+       // First let's convert ADC to deposited charge
        const HcalCalibrations &Calibrations = hConditions->getHcalCalibrations(id);
        const HcalQIECoder *ChannelCoder = hConditions->getHcalCoder(id);
        const HcalQIEShape *Shape = hConditions->getHcalShape(ChannelCoder);
@@ -317,7 +238,16 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 	   continue;
 	 }
 
-       // Fill things into the tree                                                                                                                                                                          
+       // Fill things into the tree                                                                                                                                   
+
+       for (int x = 0; x<(int)hRecHits->size(); x++) {
+	 HcalDetId id2 = (*hRecHits)[x].id();
+	 if (id==id2) {
+	   Method2Energy[PulseCount] = (*hRecHits)[x].energy();
+	   Method3Energy[PulseCount] = (*hRecHits)[x].eaux();
+	 }
+       }
+                             
        for(int i = 0; i < (int)iter->size(); i++)
 	 {
 	   const HcalQIESample &QIE = iter->sample(i);
@@ -327,8 +257,41 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
 	   Charge[PulseCount][i] = Tool[i] - Pedestal[PulseCount][i];
 	 }
 
-       if(!IsData_) SimHitEnergy[PulseCount]=hitEnergySumMap_[(*hRecHits)[RecHitIndex[id]].id().rawId()];
+       if(!IsData_) {
 
+	 double SamplingFactor = 1;
+	 if(id.subdet() == HcalBarrel) {
+	   SamplingFactor = simParameterMap_.hbParameters().samplingFactor(id);
+	 } else if (id.subdet() == HcalEndcap) {
+	   SamplingFactor = simParameterMap_.heParameters().samplingFactor(id);
+	 }
+
+	 for (int j = 0; j < (int) hSimHits->size(); j++) {
+
+	   HcalDetId simId = HcalHitRelabeller::relabel((*hSimHits)[j].id(), hcons);
+	   //if ((*hSimHits)[j].time() < 0 || (*hSimHits)[j].time() > 40) continue;
+	   
+	   if (simId == id) { // && (simId.iphi() == id.iphi() && abs(id.ieta())<14) {
+	     SimHitEnergy[PulseCount]+=SamplingFactor*((*hSimHits)[j].energy());
+	     //std::cout << 
+	   }
+	   /*	   else if (simId.ieta() == id.ieta() && simId.iphi() == id.iphi() && abs(id.ieta())>17) {
+		   if (id.depth()==1 && ((HcalDetId)(*hSimHits)[j].id()).depth()<5) {
+		   SimHitEnergy[PulseCount]+=SamplingFactor*((*hSimHits)[j].energy());
+		   }
+		   else if (id.depth()==2 && ((HcalDetId)(*hSimHits)[j].id().depth()>4) {
+		   SimHitEnergy[PulseCount]+=SamplingFactor*((*hSimHits)[j].energy());
+		   }*/
+		   
+		   //std::cout << "RecHit: " << id.ieta() << ", "<< id.iphi() << ", " << id.depth() << "; " << std::endl;
+		   //std::cout << "SimHit: " << ((HcalDetId)(*hSimHits)[j].id()).ieta() << ", " << ((HcalDetId)(*hSimHits)[j].id()).iphi() << ", " << ((HcalDetId)(*hSimHits)[j].id()).depth() << std::endl;
+		   //if ((HcalDetId)(*hSimHits)[j].id() == id) std::cout << "matches" << std::endl;
+		   //std::cout << std::endl;
+	   //}
+	 }
+       }
+      
+       
        IEta[PulseCount] = id.ieta();
        IPhi[PulseCount] = id.iphi();
        Depth[PulseCount] = id.depth();
@@ -336,19 +299,8 @@ HcalAnalyzer::analyze(const edm::Event& iEvent, const edm::EventSetup& iSetup)
        PulseCount = PulseCount + 1;
      }
 
-   // hcal sumamry objects               
-
-   //HPDHits = hSummary->maxHPDHits();
-   //HPDNoOtherHits = hSummary->maxHPDNoOtherHits();
-   //MaxZeros = hSummary->maxZeros();
-   //MinE2E10 = hSummary->minE2Over10TS();
-   //MaxE2E10 = hSummary->maxE2Over10TS();
-   //HasBadRBXR45 = hSummary->HasBadRBXTS4TS5();
-   //HasBadRBXRechitR45Loose = hSummary->HasBadRBXRechitR45Loose();
-   //HasBadRBXRechitR45Tight = hSummary->HasBadRBXRechitR45Tight();
-
    // finally actually fill the tree
-
+   
    OutputTree->Fill();
 
 }
@@ -368,23 +320,14 @@ HcalAnalyzer::beginJob()
   OutputTree->Branch("Orbit", &Orbit, "Orbit/LL");
   OutputTree->Branch("Time", &Time, "Time/LL");
 
-  //OutputTree->Branch("HPDHits", &HPDHits, "HPDHits/I");
-  //OutputTree->Branch("HPDNoOtherHits", &HPDNoOtherHits, "HPDNoOtherHits/I");
-  //OutputTree->Branch("MaxZeros", &MaxZeros, "MaxZeros/I");
-  //OutputTree->Branch("MinE2E10", &MinE2E10, "MinE2E10/D");
-  //OutputTree->Branch("MaxE2E10", &MaxE2E10, "MaxE2E10/D");
-  //OutputTree->Branch("HasBadRBXR45", &HasBadRBXR45, "HasBadRBXR45/O");
-  //OutputTree->Branch("HasBadRBXRechitR45Loose", &HasBadRBXRechitR45Loose, "HasBadRBXRechitR45Loose/O");
-  //OutputTree->Branch("HasBadRBXRechitR45Tight", &HasBadRBXRechitR45Tight, "HasBadRBXRechitR45Tight/O");
-
-  //OutputTree->Branch("OfficialDecision", &OfficialDecision, "OfficialDecision/O");
-
   if(FillHBHE == true)
     {
       OutputTree->Branch("PulseCount", &PulseCount, "PulseCount/I");
       OutputTree->Branch("Charge", &Charge, "Charge[5184][10]/D");
       OutputTree->Branch("Pedestal", &Pedestal, "Pedestal[5184][10]/D");
       OutputTree->Branch("Gain", &Gain, "Gain[5184][10]/D");
+      OutputTree->Branch("Method2Energy", &Method2Energy, "Method2Energy[5184]/D");
+      OutputTree->Branch("Method3Energy", &Method3Energy, "Method3Energy[5184]/D");
       
       if(!IsData_) OutputTree->Branch("SimHitEnergy", &SimHitEnergy, "SimHitEnergy[5184]/D");
       
@@ -437,23 +380,15 @@ void HcalAnalyzer::ClearVariables()
 	  Pedestal[i][j] = 0;
 	}
 
+      Method2Energy[i]=0;
+      Method3Energy[i]=0;
+
       if(!IsData_) SimHitEnergy[i] = 0;
       IEta[i] = 0;
       IPhi[i] = 0;
       Depth[i] = 0;
 
     }
-
-  //HPDHits = 0;
-  //HPDNoOtherHits = 0;
-  //MaxZeros = 0;
-  //MinE2E10 = 0;
-  //MaxE2E10 = 0;
-  //HasBadRBXR45 = false;
-  //HasBadRBXRechitR45Loose = false;
-  //HasBadRBXRechitR45Tight = false;
-
-  //OfficialDecision = false;
 
 }
 
